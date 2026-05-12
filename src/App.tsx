@@ -22,7 +22,7 @@ function getPreferredDark() {
 }
 
 function AppShell() {
-  const { createFile } = useMarkdownFiles();
+  const { createFile, ready, loadError } = useMarkdownFiles();
   const dockRef = useRef<DockviewApi | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -41,20 +41,41 @@ function AppShell() {
     openFileInDock(dockRef.current, file);
   }, []);
 
-  const handleCreate = useCallback(() => {
-    const file = createFile();
-    setSelectedId(file.id);
-    openFileInDock(dockRef.current, file);
+  const handleCreate = useCallback(async () => {
+    try {
+      const file = await createFile();
+      setSelectedId(file.id);
+      openFileInDock(dockRef.current, file);
+    } catch (e) {
+      console.error(e);
+    }
   }, [createFile]);
 
   const dockTheme = prefersDark ? "dockview-theme-dark" : "dockview-theme-light";
+
+  if (!ready) {
+    return (
+      <div className="app-boot">
+        <p>Loading notes…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="app-boot app-boot--error">
+        <p>Could not load notes.</p>
+        <p className="app-boot__detail">{loadError}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
       <FileSidebar
         selectedId={selectedId}
         onOpenFile={handleOpenFile}
-        onCreate={handleCreate}
+        onCreate={() => void handleCreate()}
       />
       <div className={`app-shell__main ${dockTheme}`}>
         <DockMarkdownArea onApiReady={onApiReady} />

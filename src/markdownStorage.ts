@@ -1,7 +1,9 @@
+/** `id` is a stable key: UUID in browser mode, absolute file path in Tauri. */
 export type MarkdownFile = {
   id: string;
   name: string;
-  content: string;
+  /** Populated in browser (localStorage) mode; loaded on demand in Tauri. */
+  content?: string;
 };
 
 const STORAGE_KEY = "ore-markdown-files";

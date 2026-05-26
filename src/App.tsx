@@ -1,95 +1,71 @@
+import { useEffect, useRef, useState } from "react";
 import {
-  useCallback,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { DockMarkdownArea, openFileInDock } from "./DockMarkdownArea";
-import { FileSidebar } from "./FileSidebar";
-import { MarkdownFilesProvider, useMarkdownFiles } from "./MarkdownFilesContext";
-import type { DockviewApi } from "dockview-react";
-import type { MarkdownFile } from "./markdownStorage";
+  DockviewReact,
+  type DockviewApi,
+  type DockviewReadyEvent,
+  type IDockviewPanelProps,
+} from "dockview-react";
 import "./App.css";
 
-function subscribePreferredDark(cb: () => void) {
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-}
-
-function getPreferredDark() {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function AppShell() {
-  const { createFile, ready, loadError } = useMarkdownFiles();
-  const dockRef = useRef<DockviewApi | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const prefersDark = useSyncExternalStore(
-    subscribePreferredDark,
-    getPreferredDark,
-    () => false,
+const MyPanel = (props: IDockviewPanelProps) => {
+  return (
+    <div style={{ padding: 16 }}>
+      {props.api.title ?? props.api.id}
+    </div>
   );
+};
 
-  const onApiReady = useCallback((api: DockviewApi) => {
-    dockRef.current = api;
-  }, []);
+const components = { default: MyPanel };
 
-  const handleOpenFile = useCallback((file: MarkdownFile) => {
-    setSelectedId(file.id);
-    openFileInDock(dockRef.current, file);
-  }, []);
+export default function App() {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
 
-  const handleCreate = useCallback(async () => {
-    try {
-      const file = await createFile();
-      setSelectedId(file.id);
-      openFileInDock(dockRef.current, file);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [createFile]);
+  const onReady = (event: DockviewReadyEvent) => {
+    setDockApi(event.api);
 
-  const dockTheme = prefersDark ? "dockview-theme-dark" : "dockview-theme-light";
+    event.api.addPanel({
+      id: "panel_1",
+      component: "default",
+      title: "Panel 1",
+    });
 
-  if (!ready) {
-    return (
-      <div className="app-boot">
-        <p>Loading notes…</p>
-      </div>
-    );
-  }
+    event.api.addPanel({
+      id: "panel_2",
+      component: "default",
+      title: "Panel 2",
+      position: {
+        referencePanel: "panel_1",
+        direction: "right",
+      },
+    });
+  };
 
-  if (loadError) {
-    return (
-      <div className="app-boot app-boot--error">
-        <p>Could not load notes.</p>
-        <p className="app-boot__detail">{loadError}</p>
-      </div>
-    );
-  }
+  // Dockview fa layout(width,height) solo al mount; su Tauri/WebView il box può essere 0×0.
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || !dockApi) return;
+
+    const relayout = () => {
+      const { clientWidth, clientHeight } = el;
+      if (clientWidth > 0 && clientHeight > 0) {
+        dockApi.layout(clientWidth, clientHeight);
+      }
+    };
+
+    relayout();
+    const ro = new ResizeObserver(relayout);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dockApi]);
 
   return (
-    <div className="app-shell">
-      <FileSidebar
-        selectedId={selectedId}
-        onOpenFile={handleOpenFile}
-        onCreate={() => void handleCreate()}
+    <div ref={hostRef} className="app-dock-host">
+      <DockviewReact
+        className="dock-shell dockview-theme-dark"
+        components={components}
+        onReady={onReady}
       />
-      <div className={`app-shell__main ${dockTheme}`}>
-        <DockMarkdownArea onApiReady={onApiReady} />
-      </div>
     </div>
   );
 }
-
-function App() {
-  return (
-    <MarkdownFilesProvider>
-      <AppShell />
-    </MarkdownFilesProvider>
-  );
-}
-
-export default App;
